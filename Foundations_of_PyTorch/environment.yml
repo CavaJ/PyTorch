@@ -177,7 +177,7 @@ dependencies:
   - zstd=1.5.2=h19a0ad4_0
   - pip:
       - appdirs==1.4.4
-      - hiddenlayer==0.2
+      - hiddenlayer==0.3
       - pyee==8.2.2
       - pyppeteer==1.0.2
       - python-graphviz==0.10.1
