@@ -5,24 +5,21 @@ import pandas as pd
 from scipy import stats
 
 # functions to find outliers: iqr, z_score, modified_z_score
-def iqr(df: pd.DataFrame, column_name: str, discard_negatives: bool = False, discard_zeros: bool = False):
+def iqr(df: pd.DataFrame, column_name: str, drop_nan: bool = False, discard_negatives: bool = False,
+        discard_zeros: bool = False, closeness_tolerance_to_zero: float = 1e-4) -> pd.DataFrame:
     """
     Function to find outliers in a specific column of a dataframe.
     This approach uses the Interquartile Range (IQR) to detect outliers.
     Outliers are defined as 1.5*IQR above the third quartile or below the first quartile.
     :param df: DataFrame in which to find outliers.
     :param column_name: Name of the column to search for outliers.
-    :param discard_negatives: whether to discard negative values during outlier finding
-    :param discard_zeros: whether to discard zeros during outlier finding
+    :param drop_nan: whether to drop nan values beforehand, by default False
+    :param discard_negatives: whether to discard negative values from the data distribution during outlier finding
+    :param discard_zeros: whether to discard zeros from the data distribution during outlier finding
+    :param closeness_tolerance_to_zero: closeness tolerance to zero
     :return: DataFrame of outliers in the specified column.
     """
-    # drop nan values beforehand
-    df = df.dropna()
-
-    if discard_negatives:
-        df = df[df[column_name] >= 0]
-    if discard_zeros:
-        df = df[df[column_name] != 0]
+    df = _filter_values(df, column_name, drop_nan, discard_negatives, discard_zeros, closeness_tolerance_to_zero)
 
     # Define Q1, Q3, and IQR
     q1 = df[column_name].quantile(0.25)
@@ -36,7 +33,8 @@ def iqr(df: pd.DataFrame, column_name: str, discard_negatives: bool = False, dis
     return outliers
 
 
-def z_score(df: pd.DataFrame, column_name: str, discard_negatives: bool = False, discard_zeros: bool = False):
+def z_score(df: pd.DataFrame, column_name: str, drop_nan: bool = False, discard_negatives: bool = False,
+            discard_zeros: bool = False, closeness_tolerance_to_zero: float = 1e-4) -> pd.DataFrame:
     """
     This function takes a pandas DataFrame df and a column_name as input.
     It returns the outliers of the DataFrame's column based on the z-score.
@@ -54,17 +52,13 @@ def z_score(df: pd.DataFrame, column_name: str, discard_negatives: bool = False,
 
     :param df: DataFrame in which to find outliers.
     :param column_name: Name of the column to search for outliers.
-    :param discard_negatives: whether to discard negative values during outlier finding
-    :param discard_zeros: whether to discard zeros during outlier finding
+    :param discard_negatives: whether to discard negative values from the data distribution during outlier finding
+    :param drop_nan: whether to drop nan values beforehand, by default False
+    :param discard_zeros: whether to discard zeros from the data distribution during outlier finding
+    :param closeness_tolerance_to_zero: closeness tolerance to zero
     :return: DataFrame of outliers in the specified column.
     """
-    # drop nan values beforehand
-    df = df.dropna()
-
-    if discard_negatives:
-        df = df[df[column_name] >= 0]
-    if discard_zeros:
-        df = df[df[column_name] != 0]
+    df = _filter_values(df, column_name, drop_nan, discard_negatives, discard_zeros, closeness_tolerance_to_zero)
 
     z_scores = np.abs(stats.zscore(df[column_name]))
     outliers = df[(z_scores > 3)]
@@ -72,7 +66,8 @@ def z_score(df: pd.DataFrame, column_name: str, discard_negatives: bool = False,
     return outliers
 
 
-def modified_z_score(df: pd.DataFrame, column_name: str, discard_negatives: bool = False, discard_zeros: bool = False):
+def modified_z_score(df: pd.DataFrame, column_name: str, drop_nan: bool = False, discard_negatives: bool = False,
+                     discard_zeros: bool = False, closeness_tolerance_to_zero: float = 1e-4) -> pd.DataFrame:
     """
     This function takes a DataFrame and a column name as input, and identifies outliers in the column
     using the modified Z-score method with a Median Absolute Deviation (MAD). Outliers are defined as values
@@ -91,8 +86,10 @@ def modified_z_score(df: pd.DataFrame, column_name: str, discard_negatives: bool
     Args:
         df (pandas.DataFrame): The input DataFrame.
         column_name (str): The name of the column in which to find outliers.
-        discard_negatives (bool): whether to discard negative values during outlier finding
-        discard_zeros (bool): whether to discard zeros during outlier finding
+        drop_nan (bool): whether to drop nan values beforehand, by default False
+        discard_negatives (bool): whether to discard negative values from the data distribution during outlier finding
+        discard_zeros (bool): whether to discard zeros from the data distribution during outlier finding
+        closeness_tolerance_to_zero (float): closeness tolerance to zero
 
     Returns:
         pandas.DataFrame: A DataFrame containing the outliers in the specified column.
@@ -100,19 +97,88 @@ def modified_z_score(df: pd.DataFrame, column_name: str, discard_negatives: bool
     Usage:
         outliers = modified_z_score(df, 'column_name')
     """
-    # drop nan values beforehand
-    df = df.dropna()
-
-    if discard_negatives:
-        df = df[df[column_name] >= 0]
-    if discard_zeros:
-        df = df[df[column_name] != 0]
+    df = _filter_values(df, column_name, drop_nan, discard_negatives, discard_zeros, closeness_tolerance_to_zero)
 
     mad_value = stats.median_abs_deviation(df[column_name])
     median = np.median(df[column_name])
     modified_z_scores = 0.6745 * (df[column_name] - median) / mad_value
     outliers = df[(np.abs(modified_z_scores) > 3.5)]
     return outliers
+
+
+def _filter_values(df: pd.DataFrame, column_name: str, drop_nan: bool, discard_negatives: bool,
+                   discard_zeros: bool, closeness_tolerance_to_zero: float) -> pd.DataFrame:
+    if drop_nan:
+        # drop nan values
+        df = df[df[column_name].notna()]
+
+    if discard_negatives:
+        df = df[df[column_name] >= 0]
+    if discard_zeros:
+        # Mask for values close to zero
+        mask = np.isclose(df[column_name], 0, atol=closeness_tolerance_to_zero)
+        # Filter out rows where values in the column are close to zero.
+        # if e.g. closeness_tolerance_to_zero is 1e-4, then 0.001 will not be close to 0, 0.0001 will be close to 0.
+        df = df[~mask]
+
+    return df
+
+
+def _intersection_of_dfs_on_column(df1, df2, df3, column_name):
+    """
+    Function to get the intersection of values of three DataFrames based on a certain column.
+
+    :param df1: First DataFrame
+    :param df2: Second DataFrame
+    :param df3: Third DataFrame
+    :param column_name: The name of the column to perform the intersection on
+    :return: A DataFrame with the intersection of values on the given column
+    """
+    return df1[[column_name]].merge(df2[[column_name]], on=column_name).merge(df3[[column_name]], on=column_name)
+
+
+def intersection_of_outliers_found_by_iqr_z_score_and_modified_z_score(df: pd.DataFrame, column_name: str,
+                                                                       drop_nan: bool = False,
+                                                                       discard_negatives: bool = False,
+                                                                       discard_zeros: bool = False,
+                                                                       closeness_tolerance_to_zero: float = 1e-4) \
+                                                                       -> pd.DataFrame:
+    """
+    Find the intersection of outliers in a DataFrame's column as detected by three methods: IQR, Z-score, and
+    Modified Z-score.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame containing the data.
+    column_name : str
+        The name of the column in the DataFrame for which to find the outliers.
+    drop_nan: bool
+        Whether to drop nan values beforehand, by default False.
+    discard_negatives : bool, optional
+        Whether to discard negative values from the analysis, by default False.
+    discard_zeros : bool, optional
+        Whether to discard zero values from the analysis, by default False.
+    closeness_tolerance_to_zero : float, optional
+        The tolerance within which a value is considered to be close to zero, by default 1e-4.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing the rows that are considered as outliers by all three methods (IQR, Z-score, and
+        Modified Z-score).
+
+    Example
+    -------
+    df = pd.DataFrame({'measurement': [1, 2, 3, 400, 5, 6, 700, 8, 9]})
+    intersection_of_outliers_found_by_iqr_z_score_and_modified_z_score(df, 'measurement')
+    """
+    df = _filter_values(df, column_name, drop_nan, discard_negatives, discard_zeros, closeness_tolerance_to_zero)
+
+    iqr_df = iqr(df, column_name)
+    z_score_df = z_score(df, column_name)
+    modified_z_score_df = modified_z_score(df, column_name)
+    return _intersection_of_dfs_on_column(iqr_df, z_score_df, modified_z_score_df, column_name)
 
 
 
