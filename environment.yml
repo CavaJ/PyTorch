@@ -222,7 +222,7 @@ dependencies:
       - hiddenlayer==0.3
       - pyee==8.2.2
       - pyppeteer==1.0.2
-      - python-graphviz==0.10.1
+      - graphviz==0.10.1
       - torchviz==0.0.2
       - tqdm==4.65.0
       - urllib3==1.26.16
